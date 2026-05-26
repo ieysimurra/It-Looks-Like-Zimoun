@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>It Looks Like Zimoun</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#070706;--s1:#0e0e0c;--s2:#161613;
+  --brd:#1c1c19;--brd2:#2a2a25;
+  --tx:#bab6aa;--dim:#4a4740;--dim2:#6a6660;
+  --acc:#e0d8c0;--gold:#c8a04a;--gold2:#e8c070;
+  --mono:'IBM Plex Mono',monospace;
+  --serif:'Cormorant Garamond',Georgia,serif;
+}
+
+html,body{width:100%;height:100%;background:var(--bg);color:var(--tx);
+  font-family:var(--mono);overflow:hidden;user-select:none;
+  transition:background .4s,color .4s}
+
+#cvs{display:block;position:absolute;top:0;left:0;
+  width:100%;height:100%;cursor:crosshair}
+
+/* ── Crosshair ── */
+#xh{position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;z-index:10;width:18px;height:18px}
+#xh::before,#xh::after{content:'';position:absolute;
+  background:rgba(224,216,192,.5)}
+#xh::before{width:16px;height:1px;top:8px;left:1px}
+#xh::after {width:1px;height:16px;top:1px;left:8px}
+
+/* ── Mode badge (abaixo do crosshair) ── */
+#mode-badge{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%, 26px);
+  font-size:7px;letter-spacing:.2em;color:rgba(200,160,74,.55);
+  pointer-events:none;z-index:11;
+  text-transform:uppercase;white-space:nowrap}
+
+/* ══════════════════════════════════════
+   PAUSE OVERLAY
+   Aparece sobre o canvas mas NÃO bloqueia
+   o painel lateral (right: 200px)
+══════════════════════════════════════ */
+#pause-overlay{
+  position:absolute;
+  top:0; left:0;
+  /* Para NÃO cobrir o painel lateral */
+  right:200px;
+  bottom:0;
+  background:rgba(0,0,0,.55);
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  z-index:30;    /* abaixo do painel (z-index:20 é o painel — mas painel está em right:0) */
+  gap:14px;
+  backdrop-filter:blur(2px);
+  cursor:default;
+  pointer-events:all;
+}
+#pause-overlay.vis{ display:flex }
+
+.po-title{
+  font-size:11px;letter-spacing:.35em;color:var(--acc);
+  text-transform:uppercase}
+.po-sub{
+  font-size:8px;letter-spacing:.18em;color:var(--dim);
+  text-align:center;line-height:2.2}
+.po-sub kbd{
+  display:inline-block;padding:2px 7px;
+  border:1px solid var(--brd2);
+  font-family:var(--mono);font-size:7px;color:var(--tx);margin:0 2px}
+#btn-resume{
+  margin-top:8px;
+  font-family:var(--mono);font-size:8px;letter-spacing:.3em;
+  text-transform:uppercase;padding:10px 28px;
+  border:1px solid var(--gold);background:none;color:var(--gold);
+  cursor:pointer;transition:all .2s;pointer-events:all}
+#btn-resume:hover{background:var(--gold);color:var(--bg)}
+/* Linha decorativa */
+.po-divider{
+  width:120px;height:1px;
+  background:linear-gradient(to right,transparent,var(--brd2),transparent)}
+
+/* ── HUD top ── */
+#ht{position:absolute;top:0;left:0;right:0;padding:14px 20px;
+  justify-content:space-between;align-items:flex-start;
+  pointer-events:none;z-index:20;
+  background:linear-gradient(to bottom,rgba(7,7,6,.8) 0%,transparent 100%)}
+.ht-title .t{font-size:10px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--acc);font-weight:300}
+.ht-title .s{font-size:7px;letter-spacing:.2em;color:var(--dim);margin-top:2px}
+#hstats{text-align:right;font-size:7px;color:var(--dim);
+  letter-spacing:.1em;line-height:2.2}
+#hstats span{color:var(--acc)}
+
+/* ── Panel ── */
+#panel{
+  position:absolute;right:0;top:0;bottom:0;width:200px;
+  background:rgba(10,10,9,.96);border-left:1px solid var(--brd);
+  flex-direction:column;z-index:40; /* ACIMA do pause-overlay */
+  padding:54px 0 12px;backdrop-filter:blur(10px);
+  transition:transform .3s ease,background .4s,border-color .4s;
+  overflow-y:auto;
+  /* Sempre recebe eventos de mouse */
+  pointer-events:all}
+#panel.hidden{transform:translateX(200px)}
+
+/* Indicador de modo no topo do painel */
+#panel-mode-bar{
+  position:absolute;top:0;left:0;right:0;
+  padding:8px 13px;
+  font-size:7px;letter-spacing:.18em;color:var(--dim);
+  border-bottom:1px solid var(--brd);
+  background:rgba(10,10,9,.98);
+  display:flex;align-items:center;justify-content:space-between;
+  pointer-events:none}
+#panel-mode-bar .mode-indicator{
+  display:flex;align-items:center;gap:6px}
+#panel-mode-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--gold);
+  box-shadow:0 0 6px rgba(200,160,74,.6)}
+#panel-mode-dot.exploring{background:#6a9060;
+  box-shadow:0 0 6px rgba(100,160,80,.6)}
+#panel-mode-label{font-size:7px;letter-spacing:.15em;color:var(--dim)}
+
+.psec{padding:8px 13px 7px;border-bottom:1px solid var(--brd)}
+.plbl{font-size:7px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:6px}
+
+/* Temas */
+.theme-row{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-top:2px}
+.theme-btn{padding:5px 2px;background:none;border:1px solid var(--brd);
+  cursor:pointer;font-family:var(--mono);font-size:6px;letter-spacing:.08em;
+  color:var(--dim);transition:all .15s;text-align:center;line-height:1.4}
+.theme-btn:hover{color:var(--tx);border-color:var(--brd2)}
+.theme-btn.active{color:var(--gold2);border-color:var(--gold);
+  background:rgba(200,160,74,.07)}
+.theme-btn .tswatch{display:block;width:100%;height:8px;
+  border-radius:1px;margin-bottom:3px}
+
+/* Rooms */
+.room-btn{display:flex;align-items:center;gap:7px;width:100%;padding:5px 7px;
+  background:none;border:1px solid transparent;cursor:pointer;
+  font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+  color:var(--dim);transition:all .15s;margin-bottom:1px;text-align:left}
+.room-btn:hover{color:var(--tx);border-color:var(--brd)}
+.room-btn.active{color:var(--gold2);border-color:var(--gold);
+  background:rgba(200,160,74,.07)}
+.room-btn .ri{width:6px;height:6px;border-radius:1px;flex-shrink:0;background:var(--brd2)}
+.room-btn.active .ri{background:var(--gold)}
+
+/* Sliders */
+.srow{padding:5px 13px;display:flex;flex-direction:column;gap:3px}
+.srow label{font-size:7px;color:var(--dim);letter-spacing:.12em;
+  display:flex;justify-content:space-between}
+.srow label span{color:var(--acc)}
+input[type=range]{
+  appearance:none;-webkit-appearance:none;
+  width:100%;height:1px;background:var(--brd);
+  outline:none;cursor:pointer;margin-top:4px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:9px;height:9px;background:var(--gold);
+  border-radius:50%;cursor:pointer}
+input[type=range]::-moz-range-thumb{
+  width:9px;height:9px;background:var(--gold);
+  border-radius:50%;cursor:pointer;border:none}
+
+/* Density slider */
+.dens-wrap{padding:5px 13px}
+.dens-wrap label{font-size:7px;color:var(--dim);letter-spacing:.12em;
+  display:flex;justify-content:space-between;margin-bottom:3px}
+.dens-wrap label span{color:var(--gold2);font-size:9px}
+#dens-slider{width:100%;height:2px;
+  appearance:none;-webkit-appearance:none;
+  outline:none;cursor:pointer;
+  background:linear-gradient(to right,var(--gold),var(--gold2))}
+#dens-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:12px;height:12px;background:var(--gold2);
+  border-radius:50%;cursor:pointer;
+  box-shadow:0 0 5px rgba(200,160,74,.45)}
+.dens-marks{display:flex;justify-content:space-between;
+  font-size:6px;color:var(--dim);margin-top:2px}
+
+/* Materials */
+.mbtn{display:flex;align-items:center;gap:7px;width:100%;padding:5px 7px;
+  background:none;border:1px solid transparent;cursor:pointer;
+  font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+  color:var(--dim);transition:all .15s;margin-bottom:1px;text-align:left}
+.mbtn:hover{color:var(--tx);border-color:var(--brd)}
+.mbtn.active{color:var(--acc);border-color:var(--brd2);background:rgba(224,216,192,.04)}
+.mbtn .dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;
+  background:var(--brd);transition:background .15s}
+.mbtn.active .dot{background:var(--gold)}
+
+/* Mix panel */
+#mixpanel{position:absolute;z-index:50;
+  background:rgba(7,7,6,.98);border:1px solid var(--brd2);
+  padding:14px;width:212px;display:none;
+  pointer-events:all;backdrop-filter:blur(12px)}
+#mixpanel .mxlbl{font-size:7px;letter-spacing:.25em;color:var(--dim);
+  text-transform:uppercase;margin-bottom:10px}
+.mx-row{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.mx-row select{width:76px;background:var(--s2);border:1px solid var(--brd);
+  color:var(--tx);font-family:var(--mono);font-size:8px;padding:3px 4px;cursor:pointer}
+.mx-row input[type=range]{flex:1;margin-top:0}
+.mx-row .wpct{font-size:7px;color:var(--gold);width:26px;text-align:right}
+.mx-close{display:block;margin-top:8px;font-size:7px;letter-spacing:.2em;
+  color:var(--dim);cursor:pointer;text-align:right;text-transform:uppercase}
+.mx-close:hover{color:var(--acc)}
+
+/* HUD bottom */
+#hb{position:absolute;bottom:0;left:0;right:200px;padding:12px 20px;
+  justify-content:space-between;align-items:flex-end;
+  pointer-events:none;z-index:20;
+  background:linear-gradient(to top,rgba(7,7,6,.72) 0%,transparent 100%)}
+#hint{font-size:6px;color:var(--dim);letter-spacing:.12em;line-height:2.4}
+#hint kbd{display:inline-block;padding:1px 4px;border:1px solid #252520;
+  font-family:var(--mono);font-size:6px;color:var(--tx);margin:0 1px}
+#actind{font-size:7px;color:var(--dim);letter-spacing:.15em;text-align:right}
+#actind .v{color:var(--gold);font-size:20px;font-weight:300;
+  display:block;line-height:1.1}
+
+/* FAB */
+#fab-info{position:absolute;bottom:22px;right:210px;z-index:25;
+  width:36px;height:36px;border-radius:50%;
+  border:1px solid var(--brd2);background:rgba(7,7,6,.88);
+  color:var(--dim);font-size:15px;cursor:pointer;
+  align-items:center;justify-content:center;
+  transition:all .2s;backdrop-filter:blur(6px);font-family:var(--serif)}
+#fab-info:hover{border-color:var(--gold);color:var(--gold)}
+
+/* Entry */
+#entry{position:absolute;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;z-index:100}
+#entry .grain{position:absolute;inset:0;opacity:.04;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events:none}
+#entry .logo{font-family:var(--serif);font-size:clamp(14px,2.2vw,24px);
+  font-weight:300;letter-spacing:.35em;color:var(--acc);
+  text-transform:uppercase;text-align:center;margin-bottom:5px}
+#entry .sub{font-size:7px;letter-spacing:.3em;color:var(--dim);
+  text-transform:uppercase;margin-bottom:44px}
+#entry .byline{font-family:var(--serif);font-size:clamp(11px,1.3vw,14px);
+  font-style:italic;color:var(--dim2);max-width:400px;
+  text-align:center;line-height:2;margin-bottom:50px;font-weight:300}
+#sbtn{font-family:var(--mono);font-size:8px;letter-spacing:.35em;
+  text-transform:uppercase;padding:12px 34px;
+  border:1px solid var(--gold);background:none;color:var(--gold);
+  cursor:pointer;transition:all .22s}
+#sbtn:hover{background:var(--gold);color:var(--bg)}
+
+/* Tooltip / Freq */
+#tip{position:absolute;bottom:72px;left:calc(50% - 100px);
+  background:rgba(7,7,6,.93);border:1px solid var(--brd);
+  padding:6px 13px;font-size:7px;letter-spacing:.18em;color:var(--acc);
+  pointer-events:none;z-index:30;opacity:0;transition:opacity .2s;
+  text-transform:uppercase;white-space:nowrap}
+#tip.vis{opacity:1}
+#flbl{position:absolute;pointer-events:none;z-index:35;
+  font-size:7px;letter-spacing:.12em;color:var(--gold2);
+  opacity:0;transition:opacity .2s;text-align:center;
+  transform:translate(-50%,-50%)}
+#flbl.vis{opacity:1}
+
+/* ══ INFO PAGE ══ */
+#infopage{position:absolute;inset:0;z-index:80;
+  background:var(--bg);overflow-y:auto;display:none;flex-direction:column}
+#infopage.vis{display:flex}
+.ip-header{padding:30px 40px 22px;border-bottom:1px solid var(--brd);
+  display:flex;justify-content:space-between;align-items:flex-end;
+  flex-shrink:0;position:sticky;top:0;background:var(--bg);z-index:2}
+.ip-header .series{font-size:7px;letter-spacing:.3em;color:var(--dim);
+  text-transform:uppercase;margin-bottom:5px}
+.ip-header .title{font-family:var(--serif);font-size:clamp(17px,2.8vw,28px);
+  font-weight:300;color:var(--acc);letter-spacing:.05em}
+.ip-close{font-size:8px;letter-spacing:.25em;color:var(--dim);cursor:pointer;
+  text-transform:uppercase;padding:7px 12px;border:1px solid var(--brd);
+  transition:all .2s;flex-shrink:0;pointer-events:all}
+.ip-close:hover{color:var(--acc);border-color:var(--brd2)}
+.ip-body{padding:32px 40px;max-width:860px;flex:1}
+.ip-lang-toggle{display:flex;gap:0;margin-bottom:32px;
+  width:fit-content;border:1px solid var(--brd)}
+.lang-btn{padding:6px 18px;font-family:var(--mono);font-size:7px;
+  letter-spacing:.25em;text-transform:uppercase;background:none;
+  border:none;cursor:pointer;color:var(--dim);transition:all .15s}
+.lang-btn.active{background:var(--brd2);color:var(--acc)}
+.ip-content{display:none}
+.ip-content.vis{display:block}
+.ip-section{margin-bottom:36px}
+.ip-section .sec-label{font-size:7px;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--brd)}
+.ip-section h2{font-family:var(--serif);font-size:clamp(13px,1.8vw,19px);
+  font-weight:300;color:var(--acc);margin-bottom:10px}
+.ip-section p{font-family:var(--serif);font-size:clamp(12px,1.3vw,14px);
+  font-weight:300;color:var(--tx);line-height:1.95;margin-bottom:10px}
+.ip-section em{color:var(--acc);font-style:italic}
+.ip-section strong{color:var(--acc);font-weight:400}
+.ip-quote{border-left:2px solid var(--gold);padding:11px 16px;
+  margin:18px 0;background:rgba(200,160,74,.04)}
+.ip-quote p{font-family:var(--serif);font-style:italic;
+  font-size:clamp(13px,1.5vw,16px);color:var(--acc);line-height:1.8;margin:0}
+.ip-quote cite{display:block;font-size:7px;letter-spacing:.15em;color:var(--dim);
+  margin-top:6px;font-style:normal;text-transform:uppercase}
+.ip-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.ip-link{display:flex;align-items:center;gap:7px;padding:7px 12px;
+  border:1px solid var(--brd);text-decoration:none;font-size:8px;
+  letter-spacing:.18em;color:var(--dim);text-transform:uppercase;transition:all .2s}
+.ip-link:hover{border-color:var(--gold);color:var(--gold)}
+.ip-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.ip-card{border:1px solid var(--brd);padding:12px}
+.ip-card .cn{font-size:7px;letter-spacing:.2em;color:var(--gold);
+  text-transform:uppercase;margin-bottom:6px}
+.ip-card p{font-family:var(--serif);font-size:12px;color:var(--dim2);
+  line-height:1.75;margin:0}
+.ip-tag{display:inline-block;padding:2px 7px;border:1px solid var(--brd);
+  font-size:7px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin:2px}
+.ip-footer{padding:20px 40px;border-top:1px solid var(--brd);font-size:7px;
+  letter-spacing:.14em;color:var(--dim);
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+@media(max-width:600px){
+  .ip-header,.ip-body{padding-left:18px;padding-right:18px}
+  .ip-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<canvas id="cvs"></canvas>
+<div id="xh"></div>
+<div id="mode-badge"></div>
+
+<!-- ══ PAUSE OVERLAY — só cobre o canvas, não o painel ══ -->
+<div id="pause-overlay">
+  <div class="po-title">PAUSA</div>
+  <div class="po-divider"></div>
+  <div class="po-sub">
+    Use o painel à direita para ajustar parâmetros<br>
+    <kbd>TAB</kbd> ou <kbd>P</kbd> alternar pausa/explorar<br>
+    <kbd>ESC</kbd> pausar · <kbd>WASD</kbd> mover · <kbd>DRAG</kbd> girar
+  </div>
+  <button id="btn-resume">▶ &nbsp;RETOMAR EXPLORAÇÃO</button>
+</div>
+
+<!-- ══ ENTRY ══ -->
+<div id="entry">
+  <div class="grain"></div>
+  <div class="logo">It Looks Like Zimoun</div>
+  <div class="sub">Série "It Looks Like..." · NICS/UNICAMP · 2026</div>
+  <div class="byline">
+    Objetos suspensos por cordas. Materiais que vibram, ressoam, pulsam.<br>
+    Uma instalação sonora navegável inspirada na obra de <em>Zimoun</em> —<br>
+    onde o simples gera o complexo, e o mecânico se torna musical.
+  </div>
+  <button id="sbtn">ENTRAR NA INSTALAÇÃO</button>
+</div>
+
+<!-- ══ HUD TOP ══ -->
+<div id="ht">
+  <div class="ht-title">
+    <div class="t">It Looks Like Zimoun</div>
+    <div class="s">Instalação Sonora Interativa · 2026</div>
+  </div>
+  <div id="hstats">
+    OBJETOS: <span id="st">0</span> &nbsp;
+    ATIVOS: <span id="sa">0</span> &nbsp;
+    VOZES: <span id="sv">0</span><br>
+    POS: <span id="sp">—</span> &nbsp;
+    DIR: <span id="sd">—</span> &nbsp;
+    ESPAÇO: <span id="sr">PEDRA</span>
+  </div>
+</div>
+
+<!-- ══ PANEL ══ -->
+<div id="panel">
+  <!-- Indicador de modo no topo do painel -->
+  <div id="panel-mode-bar">
+    <div class="mode-indicator">
+      <div id="panel-mode-dot"></div>
+      <div id="panel-mode-label">PAUSA</div>
+    </div>
+    <span style="font-size:6px;letter-spacing:.1em;color:var(--dim)">TAB · alternar</span>
+  </div>
+
+  <!-- Temas visuais -->
+  <div class="psec">
+    <div class="plbl">Tema Visual</div>
+    <div class="theme-row">
+      <button class="theme-btn active" data-theme="dark">
+        <span class="tswatch" style="background:#0d0d0b"></span>ESCURO
+      </button>
+      <button class="theme-btn" data-theme="light">
+        <span class="tswatch" style="background:#d0ccc0"></span>CLARO
+      </button>
+      <button class="theme-btn" data-theme="cyan">
+        <span class="tswatch" style="background:#001418"></span>CIANO
+      </button>
+      <button class="theme-btn" data-theme="amber">
+        <span class="tswatch" style="background:#180e00"></span>ÂMBAR
+      </button>
+      <button class="theme-btn" data-theme="white">
+        <span class="tswatch" style="background:#e4e0d8;border:1px solid #ccc"></span>BRANCO
+      </button>
+    </div>
+  </div>
+
+  <!-- Espaço acústico -->
+  <div class="psec">
+    <div class="plbl">Espaço Acústico</div>
+    <button class="room-btn" data-room="anechoic"><span class="ri"></span>ANECOICO</button>
+    <button class="room-btn" data-room="room"><span class="ri"></span>SALA PEQUENA</button>
+    <button class="room-btn active" data-room="stone"><span class="ri"></span>CÂMARA DE PEDRA</button>
+    <button class="room-btn" data-room="corridor"><span class="ri"></span>CORREDOR METAL</button>
+    <button class="room-btn" data-room="open"><span class="ri"></span>ESPAÇO ABERTO</button>
+    <div class="srow" style="margin-top:5px">
+      <label>WET/DRY <span id="wetval">65</span>%</label>
+      <input type="range" id="wetslider" min="0" max="100" value="65">
+    </div>
+  </div>
+
+  <!-- Densidade -->
+  <div class="psec">
+    <div class="plbl">Densidade de Objetos</div>
+    <div class="dens-wrap">
+      <label>QUANTIDADE <span id="dval">48</span></label>
+      <input type="range" id="dens-slider" min="8" max="500" step="4" value="48">
+      <div class="dens-marks">
+        <span>8</span><span>125</span><span>250</span><span>375</span><span>500</span>
+      </div>
+    </div>
+    <div style="padding:3px 13px 5px;font-size:7px;color:var(--dim);line-height:1.6">
+      Áudio: até <span style="color:var(--gold)">30 vozes</span> próximas<br>
+      Resto: visual apenas
+    </div>
+  </div>
+
+  <!-- Materiais -->
+  <div class="psec">
+    <div class="plbl">Materiais Ativos</div>
+    <button class="mbtn active" data-mat="paper"><span class="dot"></span>PAPEL</button>
+    <button class="mbtn active" data-mat="wood"><span class="dot"></span>MADEIRA</button>
+    <button class="mbtn active" data-mat="glass"><span class="dot"></span>VIDRO</button>
+    <button class="mbtn active" data-mat="metal"><span class="dot"></span>METAL</button>
+    <button class="mbtn active" data-mat="stone"><span class="dot"></span>PEDRA</button>
+    <button class="mbtn active" data-mat="rubber"><span class="dot"></span>BORRACHA</button>
+  </div>
+
+  <!-- Volumes -->
+  <div class="psec">
+    <div class="srow">
+      <label>VOLUME <span id="vval">78</span>%</label>
+      <input type="range" id="vslider" min="0" max="100" value="78">
+    </div>
+    <div class="srow" style="margin-top:5px">
+      <label>DISTÂNCIA DE AUDIÇÃO <span id="distval">14</span></label>
+      <input type="range" id="dslider" min="4" max="28" value="14">
+    </div>
+  </div>
+
+  <div style="padding:8px 13px;margin-top:auto;display:flex;flex-direction:column;gap:3px">
+    <button class="mbtn" id="allon">
+      <span class="dot" style="background:#333"></span>ATIVAR TUDO
+    </button>
+    <button class="mbtn" id="alloff">
+      <span class="dot" style="background:#333"></span>SILENCIAR TUDO
+    </button>
+  </div>
+</div>
+
+<!-- ══ MIX PANEL ══ -->
+<div id="mixpanel">
+  <div class="mxlbl">MISTURA DE MATERIAIS</div>
+  <div class="mx-row">
+    <select class="mxsel" data-idx="0"></select>
+    <input type="range" class="mxw" data-idx="0" min="0" max="100" value="100">
+    <div class="wpct" data-idx="0">100%</div>
+  </div>
+  <div class="mx-row">
+    <select class="mxsel" data-idx="1"></select>
+    <input type="range" class="mxw" data-idx="1" min="0" max="100" value="0">
+    <div class="wpct" data-idx="1">0%</div>
+  </div>
+  <div class="mx-row">
+    <select class="mxsel" data-idx="2"></select>
+    <input type="range" class="mxw" data-idx="2" min="0" max="100" value="0">
+    <div class="wpct" data-idx="2">0%</div>
+  </div>
+  <span class="mx-close" id="mxclose">FECHAR</span>
+</div>
+
+<!-- ══ HUD BOTTOM ══ -->
+<div id="hb">
+  <div id="hint">
+    <kbd>WASD</kbd> MOVER &nbsp;
+    <kbd>DRAG</kbd> CÂMERA &nbsp;
+    <kbd>CLICK</kbd> ATIVAR &nbsp;
+    <kbd>SCROLL</kbd> FREQ &nbsp;
+    <kbd>TAB/P</kbd> PAUSAR &nbsp;
+    <kbd>M</kbd> MISTURAR &nbsp;
+    <kbd>H</kbd> PAINEL &nbsp;
+    <kbd>I</kbd> INFO
+  </div>
+  <div id="actind">
+    <span class="v" id="acount">0</span>ATIVOS
+  </div>
+</div>
+
+<!-- ══ FAB INFO ══ -->
+<button id="fab-info" style="display:none">
+  <span style="font-style:italic">ℹ</span>
+</button>
+
+<div id="tip"></div>
+<div id="flbl"></div>
+
+<!-- ══ INFO PAGE ══ -->
+<div id="infopage">
+  <div class="ip-header">
+    <div>
+      <div class="series">Série "It Looks Like..." · NICS/UNICAMP · 2026</div>
+      <div class="title">It Looks Like Zimoun</div>
+    </div>
+    <div class="ip-close" id="ip-close-btn">✕ &nbsp;FECHAR</div>
+  </div>
+  <div class="ip-body">
+    <div class="ip-lang-toggle">
+      <button class="lang-btn active" data-lang="pt">PT</button>
+      <button class="lang-btn" data-lang="en">EN</button>
+    </div>
+    <!-- PT -->
+    <div class="ip-content vis" data-lang="pt">
+      <div class="ip-section">
+        <div class="sec-label">Sobre a obra</div>
+        <h2>Uma instalação que ouve o espaço</h2>
+        <p><em>It Looks Like Zimoun</em> é uma instalação sonora navegável que traduz para o ambiente digital o universo sensorial do artista suíço <strong>Zimoun</strong>. Cordas, objetos suspensos, materiais que vibram por si mesmos — e um visitante que caminha pelo espaço, descobrindo texturas sonoras que se transformam conforme a posição e o ângulo de escuta.</p>
+        <p>A obra faz parte da série <strong>"It Looks Like..."</strong>, desenvolvida no <em>NICS/UNICAMP</em> pelo Prof. Ivan Simurra.</p>
+      </div>
+      <div class="ip-section">
+        <div class="sec-label">A referência: Zimoun</div>
+        <h2>Complexidade primitiva</h2>
+        <p><strong>Zimoun</strong> (Berna, Suíça, 1977) é um dos artistas sonoros mais reconhecidos do mundo contemporâneo. Suas instalações utilizam materiais industriais simples montados em repetição para produzir ambientes sonoros orgânicos e imprevisíveis.</p>
+        <div class="ip-quote">
+          <p>"No meu trabalho de instalação, o que você ouve é o que você vê, e o que você vê é o que você ouve."</p>
+          <cite>— Zimoun</cite>
+        </div>
+      </div>
+      <div class="ip-section">
+        <div class="sec-label">Links</div>
+        <div class="ip-links">
+          <a class="ip-link" href="https://www.zimoun.net" target="_blank">⬡ zimoun.net</a>
+          <a class="ip-link" href="https://www.youtube.com/results?search_query=zimoun+sound+installation" target="_blank">▶ YouTube</a>
+          <a class="ip-link" href="https://pt.wikipedia.org/wiki/Zimoun" target="_blank">◈ Wikipedia PT</a>
+          <a class="ip-link" href="https://vimeo.com/zimoun" target="_blank">◉ Vimeo</a>
+          <a class="ip-link" href="https://nics.unicamp.br" target="_blank">◎ NICS/UNICAMP</a>
+        </div>
+        <div style="margin-top:12px">
+          <span class="ip-tag">Arte Sonora</span><span class="ip-tag">Instalação</span>
+          <span class="ip-tag">Web Audio API</span><span class="ip-tag">NICS/UNICAMP</span>
+        </div>
+      </div>
+    </div>
+    <!-- EN -->
+    <div class="ip-content" data-lang="en">
+      <div class="ip-section">
+        <div class="sec-label">About</div>
+        <h2>An installation that listens to space</h2>
+        <p><em>It Looks Like Zimoun</em> is a navigable sound installation translating the sensorial universe of Swiss artist <strong>Zimoun</strong> into a digital environment. Part of the <strong>"It Looks Like..."</strong> series by Prof. Ivan Simurra at <em>NICS/UNICAMP</em>.</p>
+        <div class="ip-quote">
+          <p>"In my installation work, what you hear is what you see, and what you see is what you hear."</p>
+          <cite>— Zimoun</cite>
+        </div>
+      </div>
+      <div class="ip-section">
+        <div class="sec-label">Links</div>
+        <div class="ip-links">
+          <a class="ip-link" href="https://www.zimoun.net" target="_blank">⬡ zimoun.net</a>
+          <a class="ip-link" href="https://www.youtube.com/results?search_query=zimoun+sound+installation" target="_blank">▶ YouTube</a>
+          <a class="ip-link" href="https://en.wikipedia.org/wiki/Zimoun" target="_blank">◈ Wikipedia EN</a>
+          <a class="ip-link" href="https://vimeo.com/zimoun" target="_blank">◉ Vimeo</a>
+          <a class="ip-link" href="https://nics.unicamp.br" target="_blank">◎ NICS/UNICAMP</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ip-footer">
+    <span>© 2026 NICS/UNICAMP · Prof. Ivan Simurra</span>
+    <span>Web Audio API · Canvas 2D · ES6 Modules</span>
+  </div>
+</div>
+
+<!-- Atualizar indicador de modo no painel quando muda -->
+<script type="module">
+  import { setOnPauseChange } from './spatial.js';
+
+  // Sincronizar o indicador visual do painel com o estado de pausa
+  function updatePanelMode(paused) {
+    const dot   = document.getElementById('panel-mode-dot');
+    const label = document.getElementById('panel-mode-label');
+    if (paused) {
+      dot.className   = '';
+      label.textContent = 'PAUSA — EDITAR';
+    } else {
+      dot.className   = 'exploring';
+      label.textContent = 'EXPLORANDO';
+    }
+  }
+
+  // Registrar segundo listener (main.js já registrou o primeiro)
+  // Usamos um evento customizado para não duplicar o callback
+  document.addEventListener('pausechange', e => updatePanelMode(e.detail));
+</script>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
